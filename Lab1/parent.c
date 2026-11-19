@@ -6,14 +6,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 int main(void) {
     char* line = NULL;
     size_t cap = 0;
     ssize_t len;
 
-    printf("Введите имя файла: ");
-    fflush(stdout);
+    printf("Введите имя файла: \n");
+
 
     if (getline(&line, &cap, stdin) == -1) {
         fprintf(stderr, "Имя файла не введено\n");
@@ -73,11 +74,14 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    while ((len = getline(&line, &cap, stdin)) != -1)
+    signal(SIGPIPE, SIG_IGN);
+
+    while ((len = getline(&line, &cap, stdin)) != -1) {
         if (write(pipe1[1], line, len) == -1) {
             perror("write");
-            return EXIT_FAILURE;
+            break;
         }
+    }
 
     if (close(pipe1[1]) == -1) {
         perror("close");
@@ -90,8 +94,10 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    if (WIFEXITED(status) != 0 && WEXITSTATUS(status) != 0) {
-        fprintf(stderr, "Child завершился с ошибкой %d\n", WEXITSTATUS(status));
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "Child завершился с ошибкой, код %d\n", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        fprintf(stderr, "Child убит сигналом %d\n", WTERMSIG(status));
     }
 
     printf("Имя файла было: %s\n", filename);
